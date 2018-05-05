@@ -1,6 +1,6 @@
 USE [DavidChat]
 GO
-/****** Object:  Table [dbo].[Messages]    Script Date: 4/28/2018 12:35:33 PM ******/
+/****** Object:  Table [dbo].[Messages]    Script Date: 5/5/2018 12:31:52 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
