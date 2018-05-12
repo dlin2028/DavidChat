@@ -1,10 +1,11 @@
 USE [DavidChat]
 GO
-/****** Object:  StoredProcedure [client].[CreateRoom]    Script Date: 5/5/2018 12:31:53 PM ******/
+/****** Object:  StoredProcedure [client].[CreateRoom]    Script Date: 5/12/2018 12:31:50 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 -- =============================================
 -- Author:		Name
@@ -29,14 +30,14 @@ BEGIN
 
 		DECLARE @roomID uniqueidentifier
 		SET @roomID = (SELECT TOP 1 RoomID FROM Rooms WHERE Name = @name)
+		
+		INSERT INTO RoomUsers (UserID, RoomID)
+		VALUES (@userID, @roomID)
 
-		UPDATE Users
-		SET RoomID = @roomID
-		WHERE @userID = ID
-
-		SELECT @roomID
+		SELECT @roomID AS 'RoomID'
 	END
 END
+
 
 
 GO

@@ -24,14 +24,12 @@ namespace DavidChat
     {
         public string Name;
         public Guid Guid;
-        public int PublicID;
         public ConsoleColor Color;
 
-        public User(string name, ConsoleColor color, int publicID)
+        public User(string name, ConsoleColor color)
         {
             Name = name;
             Color = color;
-            PublicID = publicID;
         }
         public User(string name, ConsoleColor color, Guid guid)
         {
@@ -60,21 +58,52 @@ namespace DavidChat
 
         private string connectionString;
         private SqlConnection connection;
+        private Dictionary<int, User> users;
 
         public SQLManager(User user, string connectionString)
         {
             User = user;
             this.connectionString = connectionString;
             connection = new SqlConnection(connectionString);
+            Register();
         }
 
-        public User[] GetUsers(Room room)
+        public bool Register()
         {
-            List<User> users = new List<User>();
+            var joinCommand = new SqlCommand("client.Register", connection);
+            joinCommand.CommandType = System.Data.CommandType.StoredProcedure;
+            joinCommand.Parameters.Add(new SqlParameter("@name", User.Name));
+            joinCommand.Parameters.Add(new SqlParameter("@color", (int)User.Color));
 
-            var command = new SqlCommand("client.GetUsers");
+            bool result = false;
+            using (SqlDataAdapter adapter = new SqlDataAdapter(joinCommand))
+            {
+                try
+                {
+                    connection.Open();
+
+                    DataTable table = new DataTable();
+                    adapter.Fill(table);
+
+                    User.Guid = table.Rows[0].Field<Guid>("UserID");
+
+                    connection.Close();
+                    result = true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                    result = false;
+                }
+            }
+            return result;
+        }
+
+        public void GetUsers()
+        {
+            var command = new SqlCommand("client.GetUsers", connection);
             command.CommandType = System.Data.CommandType.StoredProcedure;
-            command.Parameters.Add(new SqlParameter("@roomID", room.Guid));
+            command.Parameters.Add(new SqlParameter("@roomID", Room.Guid));
 
             using (SqlDataAdapter adapter = new SqlDataAdapter(command))
             {
@@ -85,10 +114,10 @@ namespace DavidChat
 
                     adapter.Fill(table);
 
-                    users = new List<User>();
+                    users = new Dictionary<int, User>();
                     foreach (DataRow row in table.Rows)
                     {
-                        users.Add(new User(row.Field<string>("Name"), (ConsoleColor)int.Parse(row.Field<string>("Color")), Guid.Empty));
+                        users.Add(row.Field<int>("PublicID"), new User(row.Field<string>("Name"), (ConsoleColor)int.Parse(row.Field<string>("Color"))));
                     }
 
                     connection.Close();
@@ -98,15 +127,47 @@ namespace DavidChat
                     Console.WriteLine(ex.ToString());
                 }
             }
-            return users.ToArray();
         }
 
-        public bool CreateRoom()
+        public bool JoinRoom(string name, string password)
         {
-            var createCommand = new SqlCommand("client.CreateRoom");
+            var joinCommand = new SqlCommand("client.JoinRoom", connection);
+            joinCommand.CommandType = System.Data.CommandType.StoredProcedure;
+            joinCommand.Parameters.Add(new SqlParameter("@userID", User.Guid));
+            joinCommand.Parameters.Add(new SqlParameter("@roomName", name));
+            joinCommand.Parameters.Add(new SqlParameter("@password", password));
+
+            bool result = false;
+            using (SqlDataAdapter adapter = new SqlDataAdapter(joinCommand))
+            {
+                try
+                {
+                    connection.Open();
+
+                    DataTable table = new DataTable();
+                    adapter.Fill(table);
+
+                    Room = new Room(name, password, table.Rows[0].Field<Guid>("RoomID"));
+
+                    connection.Close();
+                    result = true;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                    result = false;
+                }
+            }
+            return result;
+        }
+
+        public bool CreateRoom(string name, string password)
+        {
+            var createCommand = new SqlCommand("client.CreateRoom", connection);
             createCommand.CommandType = System.Data.CommandType.StoredProcedure;
             createCommand.Parameters.Add(new SqlParameter("@userID", User.Guid));
-            createCommand.Parameters.Add(new SqlParameter("@password", User.Guid));
+            createCommand.Parameters.Add(new SqlParameter("@name", name));
+            createCommand.Parameters.Add(new SqlParameter("@password", password));
 
             bool result = false;
             using (SqlDataAdapter adapter = new SqlDataAdapter(createCommand))
@@ -117,13 +178,15 @@ namespace DavidChat
 
                     DataTable table = new DataTable();
                     adapter.Fill(table);
-                    result = Guid.TryParse(table.Rows[0].Field<string>("RoomID"), out Room.Guid);
+                    Room = new Room(name, password, table.Rows[0].Field<Guid>("RoomID"));
 
                     connection.Close();
+                    result = true;
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex.ToString());
+                    result = false;
                 }
             }
             return result;
@@ -131,7 +194,7 @@ namespace DavidChat
 
         public void LeaveRoom()
         {
-            var roomsCommand = new SqlCommand("client.LeaveRoom");
+            var roomsCommand = new SqlCommand("client.LeaveRoom", connection);
             roomsCommand.CommandType = System.Data.CommandType.StoredProcedure;
             roomsCommand.Parameters.Add(new SqlParameter("@userID", User.Guid));
 
@@ -149,7 +212,7 @@ namespace DavidChat
 
         public string[] GetRooms()
         {
-            var roomsCommand = new SqlCommand("client.GetRooms");
+            var roomsCommand = new SqlCommand("client.GetRooms", connection);
             roomsCommand.CommandType = System.Data.CommandType.StoredProcedure;
 
             SqlDataAdapter adapter = new SqlDataAdapter(roomsCommand);
@@ -165,13 +228,13 @@ namespace DavidChat
             return rooms.ToArray();
         }
 
-        public Message[] GetNewMessages(Dictionary<int, User> users)
+        public Message[] GetNewMessages()
         {
             List<Message> messages = new List<Message>();
 
-            var updateCommand = new SqlCommand("client.GetMessages");
+            var updateCommand = new SqlCommand("client.GetMessages", connection);
             updateCommand.CommandType = System.Data.CommandType.StoredProcedure;
-            updateCommand.Parameters.Add(new SqlParameter("@roomID", User.Guid));
+            updateCommand.Parameters.Add(new SqlParameter("@roomID", Room.Guid));
 
             using (SqlDataAdapter adapter = new SqlDataAdapter(updateCommand))
             {
@@ -185,6 +248,10 @@ namespace DavidChat
                     messages = new List<Message>();
                     foreach (DataRow row in table.Rows)
                     {
+                        if (!users.ContainsKey(row.Field<int>("PublicID")))
+                        {
+                            GetUsers();
+                        }
                         messages.Add(new Message(row.Field<string>("Text"), users[row.Field<int>("PublicID")], DateTime.Parse(row.Field<string>("Time"))));
                     }
 
@@ -192,14 +259,6 @@ namespace DavidChat
                 }
                 catch (Exception ex)
                 {
-                    try
-                    {
-
-                    }
-                    catch
-                    {
-
-                    }
                     Console.WriteLine(ex.ToString());
                 }
             }
@@ -209,14 +268,12 @@ namespace DavidChat
     class Program
     {
         static User user;
-        Room room;
+        static SQLManager manager;
 
         static void Main(string[] args)
         {
-
             Console.WriteLine("Enter name");
             user = new User(Console.ReadLine(), ConsoleColor.White, Guid.NewGuid());
-            Console.WriteLine("guid: " + user.Guid);
 
             Console.WriteLine("-----------Enter favorite color------------");
             string[] colors = Enum.GetNames(typeof(ConsoleColor));
@@ -231,12 +288,98 @@ namespace DavidChat
                 Console.WriteLine("try again");
             }
             user.Color = (ConsoleColor)favoriteColor;
+            Console.ForegroundColor = user.Color;
 
+            manager = new SQLManager(user, "Data Source = GMRMLTV; Initial Catalog = DavidChat; User ID = sa; Password = GreatMinds110;");
+            Console.WriteLine("guid: " + user.Guid);
 
-            while (true) //FINAL DO NOT DELETE
+            while (true)
             {
+                //join room
+                while (manager.Room == null)
+                {
+                    Console.WriteLine("Would you like to Create or Join a room");
+                    string input = Console.ReadLine();
+                    if (input.ToLower().Contains("create"))
+                    {
+                        Console.Write("Name: ");
+                        string name = Console.ReadLine().Trim();
+                        Console.Write("Password: ");
+                        string password = Console.ReadLine().Trim();
+                        if (manager.CreateRoom(name, password))
+                        {
+                            Console.WriteLine($"Room {name} joined successfully");
+                        }
+                        else
+                        {
+                            Console.WriteLine("Name already taken. Try again");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("------------Rooms-------------");
+                        string[] rooms = manager.GetRooms();
+                        foreach (string room in rooms)
+                        {
+                            Console.WriteLine(room);
+                        }
 
+                        string name = "";
+                        bool exists = false;
+                        while (!exists)
+                        {
+                            Console.Write("Name: ");
+                            name = Console.ReadLine().Trim();
+                            foreach (string room in rooms)
+                            {
+                                if (room.Trim() == name)
+                                {
+                                    exists = true;
+                                    break;
+                                }
+                            }
+                            if (!exists)
+                            {
+                                Console.WriteLine("Room does not exist");
+                            }
+                        }
+                        Console.Write("Password: ");
+                        string password = Console.ReadLine().Trim();
+
+                        if (manager.JoinRoom(name, password))
+                        {
+                            Console.WriteLine($"Room {name} joined successfully");
+                        }
+                        else
+                        {
+                            Console.WriteLine("Invalid password. Try again");
+                        }
+                    }
+                }
+
+                Message[] messages = manager.GetNewMessages();
+                string buffer = "";
+                if (Console.KeyAvailable)
+                {
+                    ConsoleKey key = Console.ReadKey().Key;
+                    switch (key)
+                    {
+                        case ConsoleKey.Backspace:
+                            string temp = "";
+                            for (int i = 0; i < buffer.Length - 1; i++)
+                            {
+                                temp += buffer[i];
+                            }
+                            buffer = temp;
+                            break;
+
+                        default:
+                            buffer += key.ToString();
+                            break;
+                    }
+                }
             }
         }
+
     }
 }
