@@ -1,10 +1,12 @@
 USE [DavidChat]
 GO
-/****** Object:  StoredProcedure [client].[GetMessages]    Script Date: 5/12/2018 12:31:50 PM ******/
+/****** Object:  StoredProcedure [client].[GetMessages]    Script Date: 5/19/2018 12:32:59 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
+
 -- =============================================
 -- Author:		Name
 -- Create date: 
@@ -20,9 +22,11 @@ BEGIN
 	SET NOCOUNT ON;
 
     -- Insert statements for procedure here
-	SELECT Users.Name, Messages.Text, Messages.Time
+	SELECT Users.PublicID, Messages.MessageID, Messages.Text, Messages.Time
 	FROM Users
 	INNER JOIN Messages ON Users.ID = Messages.UserID AND Messages.RoomID = @roomID
 END
+
+
 
 GO

@@ -1,10 +1,11 @@
 USE [DavidChat]
 GO
-/****** Object:  StoredProcedure [client].[GetUsers]    Script Date: 5/12/2018 12:31:50 PM ******/
+/****** Object:  StoredProcedure [client].[GetUsers]    Script Date: 5/19/2018 12:32:59 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 
 -- =============================================
@@ -22,8 +23,11 @@ BEGIN
 	SET NOCOUNT ON;
 
     -- Insert statements for procedure here
-	SELECT Name, Color, PublicID FROM Users WHERE @roomID = RoomID 
+	SELECT Users.PublicID, Users.Name, Users.Color 
+	FROM Users
+	INNER JOIN RoomUsers ON Users.ID = RoomUsers.UserID
 END
+
 
 
 

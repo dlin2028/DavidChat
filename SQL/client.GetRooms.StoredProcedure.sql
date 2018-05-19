@@ -1,6 +1,6 @@
 USE [DavidChat]
 GO
-/****** Object:  StoredProcedure [client].[GetRooms]    Script Date: 5/12/2018 12:31:50 PM ******/
+/****** Object:  StoredProcedure [client].[GetRooms]    Script Date: 5/19/2018 12:32:59 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

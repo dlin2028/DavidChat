@@ -59,10 +59,15 @@ namespace DavidChat
         private string connectionString;
         private SqlConnection connection;
         private Dictionary<int, User> users;
+        Dictionary<int, Message> messages;
 
         public SQLManager(User user, string connectionString)
         {
             User = user;
+
+
+            messages = new Dictionary<int, Message>();
+            users = new Dictionary<int, User>();
             this.connectionString = connectionString;
             connection = new SqlConnection(connectionString);
             Register();
@@ -92,6 +97,7 @@ namespace DavidChat
                 }
                 catch (Exception ex)
                 {
+                    connection.Close();
                     Console.WriteLine(ex.ToString());
                     result = false;
                 }
@@ -117,13 +123,14 @@ namespace DavidChat
                     users = new Dictionary<int, User>();
                     foreach (DataRow row in table.Rows)
                     {
-                        users.Add(row.Field<int>("PublicID"), new User(row.Field<string>("Name"), (ConsoleColor)int.Parse(row.Field<string>("Color"))));
+                        users.Add(row.Field<int>("PublicID"), new User(row.Field<string>("Name"), (ConsoleColor)row.Field<int>("Color")));
                     }
 
                     connection.Close();
                 }
                 catch (Exception ex)
                 {
+                    connection.Close();
                     Console.WriteLine(ex.ToString());
                 }
             }
@@ -154,6 +161,7 @@ namespace DavidChat
                 }
                 catch (Exception ex)
                 {
+                    connection.Close();
                     Console.WriteLine(ex.ToString());
                     result = false;
                 }
@@ -185,6 +193,7 @@ namespace DavidChat
                 }
                 catch (Exception ex)
                 {
+                    connection.Close();
                     Console.WriteLine(ex.ToString());
                     result = false;
                 }
@@ -206,6 +215,7 @@ namespace DavidChat
             }
             catch (Exception ex)
             {
+                connection.Close();
                 Console.WriteLine(ex.ToString());
             }
         }
@@ -228,10 +238,31 @@ namespace DavidChat
             return rooms.ToArray();
         }
 
+        public bool SendMessage(string message)
+        {
+            var roomsCommand = new SqlCommand("client.SendMessage", connection);
+            roomsCommand.CommandType = System.Data.CommandType.StoredProcedure;
+            roomsCommand.Parameters.Add(new SqlParameter("@userID", User.Guid));
+            roomsCommand.Parameters.Add(new SqlParameter("@roomID", Room.Guid));
+            roomsCommand.Parameters.Add(new SqlParameter("@text", message));
+
+            try
+            {
+                connection.Open();
+                roomsCommand.ExecuteNonQuery();
+                connection.Close();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                connection.Close();
+                Console.WriteLine(ex.ToString());
+                return false;
+            }
+        }
+
         public Message[] GetNewMessages()
         {
-            List<Message> messages = new List<Message>();
-
             var updateCommand = new SqlCommand("client.GetMessages", connection);
             updateCommand.CommandType = System.Data.CommandType.StoredProcedure;
             updateCommand.Parameters.Add(new SqlParameter("@roomID", Room.Guid));
@@ -245,24 +276,33 @@ namespace DavidChat
 
                     adapter.Fill(table);
 
-                    messages = new List<Message>();
+                    var newMessages = new List<Message>();
                     foreach (DataRow row in table.Rows)
                     {
                         if (!users.ContainsKey(row.Field<int>("PublicID")))
                         {
+                            connection.Close();
                             GetUsers();
                         }
-                        messages.Add(new Message(row.Field<string>("Text"), users[row.Field<int>("PublicID")], DateTime.Parse(row.Field<string>("Time"))));
+                        if(!messages.ContainsKey(row.Field<int>("MessageID")))
+                        {
+                            var msg = new Message(row.Field<string>("Text"), users[row.Field<int>("PublicID")], row.Field<DateTime>("Time"));
+
+                            messages.Add(row.Field<int>("MessageID"), msg);
+                            newMessages.Add(msg);
+                        }
                     }
 
                     connection.Close();
+                    return newMessages.ToArray();
                 }
                 catch (Exception ex)
                 {
+                    connection.Close();
                     Console.WriteLine(ex.ToString());
                 }
             }
-            return null;
+            return new Message[0];
         }
     }
     class Program
@@ -293,6 +333,7 @@ namespace DavidChat
             manager = new SQLManager(user, "Data Source = GMRMLTV; Initial Catalog = DavidChat; User ID = sa; Password = GreatMinds110;");
             Console.WriteLine("guid: " + user.Guid);
 
+            string line = "";
             while (true)
             {
                 //join room
@@ -317,17 +358,17 @@ namespace DavidChat
                     }
                     else
                     {
-                        Console.WriteLine("------------Rooms-------------");
-                        string[] rooms = manager.GetRooms();
-                        foreach (string room in rooms)
-                        {
-                            Console.WriteLine(room);
-                        }
-
                         string name = "";
                         bool exists = false;
                         while (!exists)
                         {
+                            Console.WriteLine("------------Rooms-------------");
+                            string[] rooms = manager.GetRooms();
+                            foreach (string room in rooms)
+                            {
+                                Console.WriteLine(room);
+                            }
+
                             Console.Write("Name: ");
                             name = Console.ReadLine().Trim();
                             foreach (string room in rooms)
@@ -341,6 +382,7 @@ namespace DavidChat
                             if (!exists)
                             {
                                 Console.WriteLine("Room does not exist");
+                                rooms = manager.GetRooms();
                             }
                         }
                         Console.Write("Password: ");
@@ -358,7 +400,14 @@ namespace DavidChat
                 }
 
                 Message[] messages = manager.GetNewMessages();
-                string buffer = "";
+                foreach (var message in messages)
+                {
+                    Console.ForegroundColor = message.User.Color;
+                    Console.Write(message.User.Name.Trim() + ": ");
+                    Console.WriteLine(message.Text);
+                }
+                Console.ForegroundColor = user.Color;
+
                 if (Console.KeyAvailable)
                 {
                     ConsoleKey key = Console.ReadKey().Key;
@@ -366,15 +415,38 @@ namespace DavidChat
                     {
                         case ConsoleKey.Backspace:
                             string temp = "";
-                            for (int i = 0; i < buffer.Length - 1; i++)
+                            for (int i = 0; i < line.Length - 1; i++)
                             {
-                                temp += buffer[i];
+                                temp += line[i];
                             }
-                            buffer = temp;
+                            
+                            Console.SetCursorPosition(0, Console.CursorTop);
+                            Console.Write(new string(' ', Console.WindowWidth - 1));
+                            Console.SetCursorPosition(0, Console.CursorTop);
+
+                            Console.Write(user.Name + ": ");
+                            line = temp;
+                            Console.Write(line);
+
                             break;
 
+                        case ConsoleKey.Enter:
+                            manager.SendMessage(line);
+                            Console.WriteLine("");
+                            line = user.Name + ": ";
+
+                            break;
+                            
                         default:
-                            buffer += key.ToString();
+                            line += (char)key;
+                            for (int i = 0; i < Console.BufferWidth; i++)
+                            {
+                                Console.Write(" ");
+                                Console.Write((char)ConsoleKey.Enter);
+                            }
+                            Console.Write(user.Name + ": ");
+                            Console.Write(line);
+
                             break;
                     }
                 }

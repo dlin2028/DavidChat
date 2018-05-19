@@ -1,6 +1,6 @@
 USE [DavidChat]
 GO
-/****** Object:  StoredProcedure [client].[Register]    Script Date: 5/19/2018 12:32:59 PM ******/
+/****** Object:  StoredProcedure [dbo].[ProcedureName]    Script Date: 5/19/2018 12:32:59 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -10,10 +10,11 @@ GO
 -- Create date: 
 -- Description:	
 -- =============================================
-CREATE PROCEDURE [client].[Register] 
+CREATE PROCEDURE [dbo].[ProcedureName] 
 	-- Add the parameters for the stored procedure here
-	@name nchar(10),
-	@color int = 0
+	@userID uniqueidentifier,
+	@roomID uniqueidentifier,
+	@text char(500)
 AS
 BEGIN
 	-- SET NOCOUNT ON added to prevent extra result sets from
@@ -21,13 +22,8 @@ BEGIN
 	SET NOCOUNT ON;
 
     -- Insert statements for procedure here
-	DECLARE @userID uniqueidentifier
-	SET @userID = (NewID())
-
-	INSERT INTO Users(ID, Name, Color)
-	VALUES (@userID, @name, @color)
-
-	SELECT @userID AS 'UserID'
+	INSERT INTO Messages (UserID, RoomID, Text, Time)
+	VALUES (@userID, @roomID, @text, GETDATE())
 END
 
 GO
